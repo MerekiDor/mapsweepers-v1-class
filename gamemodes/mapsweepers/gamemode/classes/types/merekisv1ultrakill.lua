@@ -39,6 +39,8 @@ function class.OnSpawn(ply)
 	merekisv1ultrakill_UpdateV1s(ply)
 	merekisv1ultrakill_SetupStyleTimer(ply)
 	merekisv1ultrakill_NetSendStyle(ply, 1, 0)
+
+	class.PredictionReset(ply)
 end
 
 function class.OnDeath(ply)
@@ -46,6 +48,8 @@ function class.OnDeath(ply)
 		ply.jcms_v1ScrapeSnd:Stop()
 		ply.jcms_v1ScrapeSnd = nil
 	end
+
+	class.PredictionReset(ply)
 end
 
 -- Walljumping {{{
@@ -63,11 +67,73 @@ end
 	}
 -- }}}
 
+-- Movement prediction (saving fields and stuff so that client doesn't spaz out) {{{
+do
+	local function fieldsSave(plyTbl)
+		local fields = {}
+
+		for k, v in pairs(plyTbl) do
+			if k:sub(1, 7) == "jcms_v1" then
+				if type(v) == "Vector" then
+					fields[k] = Vector(v)
+				elseif type(v) ~= "table" then
+					fields[k] = v
+				end
+			end
+		end
+
+		return fields
+	end
+
+	local function fieldsLoad(plyTbl, fields)
+		for k, v in pairs(fields) do
+			plyTbl[ k ] = v
+		end
+	end
+
+	function class.PredictionOpen(plyTbl, cmd)
+		if SERVER then return end
+
+		local id = cmd:CommandNumber()
+		if id == 0 then -- Thanks gmod
+			return fieldsSave(plyTbl)
+		end
+
+		local predictHistory = plyTbl.jcms_predictHistory
+		if not predictHistory then
+			predictHistory = {}
+			plyTbl.jcms_predictHistory = predictHistory
+		end
+
+		if predictHistory[id] then
+			fieldsLoad(plyTbl, predictHistory[id])
+		else
+			predictHistory[id] = fieldsSave(plyTbl)
+		end
+
+		-- Erasing history with more than 256 entries. Tested with net_fakelag 500, seemed bearable
+		local predictHistoryRecords = 256
+		for i=0, 7 do -- Erase multiple IDs at once in case we skip over one or two
+			predictHistory[id - predictHistoryRecords - i] = nil
+		end
+	end
+
+	function class.PredictionClose(plyTbl, cmd, predictionFields)
+		fieldsLoad(plyTbl, predictionFields)
+	end
+
+	function class.PredictionReset(ply)
+		local plyTbl = ply:GetTable()
+		plyTbl.jcms_v1SlamVictims = nil
+		plyTbl.jcms_predictHistory = nil
+	end
+end
+-- }}}
+
 function class.Think(ply)
+	if CLIENT then return end
 	local plyTbl = ply:GetTable()
 	local dt = FrameTime()
-
-	plyTbl.jcms_v1Stamina = math.Clamp((plyTbl.jcms_v1Stamina or 0) + dt * 0.7, 0, 3)
 
 	if plyTbl.jcms_v1Slamming then
 		local pos1 = ply:GetPos()
@@ -92,7 +158,7 @@ function class.Think(ply)
 		local victim = tr.Entity
 		if IsValid(victim) and not plyTbl.jcms_v1SlamVictims[ victim ] then
 			plyTbl.jcms_v1SlamVictims[ victim ] = true
-			if victim:Health() > 0 and victim.TakeDamageInfo then
+			if victim:Health() > 0 then
 				local dmgAmount = 25
 				if victim.jcms_danger == jcms.NPC_DANGER_FODDER then
 					dmgAmount = 75
@@ -162,17 +228,28 @@ end
 	end
 
 	function class.SetupMove(ply, mv, cmd)
+		if CLIENT and ply ~= LocalPlayer() then return end
 		if not ply:Alive() then return end
-		if not ply:GetMoveType() == MOVETYPE_WALK then return end
-		if IsValid(ply:GetVehicle()) or IsValid(ply:GetNWEntity("jcms_vehicle")) then return end
+
 		local plyTbl = ply:GetTable()
+		local predictionFields = class.PredictionOpen(plyTbl, cmd)
 		local ct = CurTime()
-		
+
+		-- restore stamina even if we're in a vehicle
+		plyTbl.jcms_v1Stamina = math.Clamp( (plyTbl.jcms_v1Stamina or 3) + (engine.TickInterval() * 0.7), 0, 3 )
+
+		if (ply:GetMoveType() ~= MOVETYPE_WALK) or IsValid(ply:GetVehicle()) or IsValid(ply:GetNWEntity("jcms_vehicle")) then
+			if predictionFields then
+				class.PredictionClose(plyTbl, cmd, predictionFields)
+			end
+			return
+		end
+
 		local isMoving = mv:GetForwardSpeed() ~= 0 or mv:GetSideSpeed() ~= 0 or mv:GetUpSpeed() ~= 0
 		local isMovingStrictlyForward = mv:GetForwardSpeed() > 0 and mv:GetSideSpeed() == 0
 		local isOnGround = ply:IsOnGround()
 		local isSprinting = mv:KeyDown(IN_SPEED)
-		local isCreeped = IsValid( jcms.zombieCreepCells[ jcms.zombieCreep_GetCell( ply:GetPos() ) ] )
+		local isCreeped = IsValid( jcms.zombieCreepCells[ jcms.zombieCreep_GetCell( mv:GetOrigin() ) ] )
 
 		-- sprinthack but implemented manually {{{
 			local nSpd = bit.bnot(IN_SPEED)
@@ -241,7 +318,7 @@ end
 		-- walls and air strafing {{{
 			if not isOnGround then
 				local checkDist = 10
-				local pos = ply:GetPos()
+				local pos = mv:GetOrigin()
 				local checkPos = Vector(pos)
 				local pos_x, pos_y, pos_z = pos:Unpack()
 
@@ -286,10 +363,12 @@ end
 						
 						wallNormal:Mul(ply:GetJumpPower())
 						mv:SetVelocity(wallNormal)
-						ply:EmitSound("npc/dog/dog_footstep_run"..math.random(1, 8)..".wav", 100, 117)
+						if SERVER then
+							ply:EmitSound("npc/dog/dog_footstep_run"..math.random(1, 8)..".wav", 100, 117)
+						end
 						
 						plyTbl.jcms_v1WallJumps = math.max(0, (plyTbl.jcms_v1WallJumps or 0) - 1)
-						if plyTbl.jcms_v1WallJumps == 0 then
+						if SERVER and plyTbl.jcms_v1WallJumps == 0 then
 							ply:EmitSound("npc/dog/dog_pneumatic"..math.random(1, 2)..".wav", 100, 130)
 						end
 					end
@@ -327,7 +406,10 @@ end
 					if isOnGround and plyTbl.jcms_v1LastSlamLand and (ct - plyTbl.jcms_v1LastSlamLand) > powerSlamTime then
 						if not plyTbl.jcms_v1PerformedPowerSlam then
 							plyTbl.jcms_v1PerformedPowerSlam = true
-							class.PerformPowerSlam(ply)
+
+							if SERVER then
+								class.PerformPowerSlam(ply)
+							end
 						end
 					end
 				else
@@ -350,20 +432,21 @@ end
 					if not plyTbl.jcms_v1Dashed and plyTbl.jcms_v1Stamina ~= nil then
 						plyTbl.jcms_v1Dashed = true
 						if plyTbl.jcms_v1Stamina >= 1 then
-							if SERVER then
-								plyTbl.jcms_v1Stamina = plyTbl.jcms_v1Stamina - 1
-							end
+							plyTbl.jcms_v1Stamina = plyTbl.jcms_v1Stamina - 1
 							
 							mv:SetVelocity( (runSpeed * dashSpeedMul) * dir2DDesired )
 							plyTbl.jcms_v1LastDash = ct
 							plyTbl.jcms_v1DashShouldCancel = not isOnGround
-							ply:EmitSound("merekisv1ultrakill/dash.wav", 100)
+
+							if SERVER then
+								ply:EmitSound("merekisv1ultrakill/dash.wav", 100)
+							end
 
 							plyTbl.jcms_v1Slamming = false
-							if SERVER then
+							if SERVER and game.SinglePlayer() then
 								merekisv1ultrakill_NetSendStamina(ply, plyTbl.jcms_v1Stamina)
 							end
-						else
+						elseif SERVER then
 							ply:EmitSound("physics/metal/metal_sheet_impact_bullet2.wav", 100, 137, 0.5)
 						end
 					end
@@ -390,21 +473,29 @@ end
 		-- }}}
 
 		-- scraping and jumping sound {{{
-			if shouldDoScrapeSound then
-				if not plyTbl.jcms_v1ScrapeSnd then
-					plyTbl.jcms_v1ScrapeSnd = CreateSound(ply, "physics/metal/canister_scrape_rough_loop1.wav")
+			if SERVER then
+				if shouldDoScrapeSound then
+					if not plyTbl.jcms_v1ScrapeSnd then
+						plyTbl.jcms_v1ScrapeSnd = CreateSound(ply, "physics/metal/canister_scrape_rough_loop1.wav")
+					end
+
+					plyTbl.jcms_v1ScrapeSnd:PlayEx(1, 187)
+				else
+					if plyTbl.jcms_v1ScrapeSnd then
+						plyTbl.jcms_v1ScrapeSnd:Stop()
+						plyTbl.jcms_v1ScrapeSnd = nil
+					end
 				end
 
-				plyTbl.jcms_v1ScrapeSnd:PlayEx(1, 187)
-			else
-				if plyTbl.jcms_v1ScrapeSnd then
-					plyTbl.jcms_v1ScrapeSnd:Stop()
-					plyTbl.jcms_v1ScrapeSnd = nil
+				if mv:KeyPressed(IN_JUMP) and isOnGround then
+					ply:EmitSound("npc/dog/dog_footstep_run02.wav", 100, 147)
 				end
 			end
+		-- }}}
 
-			if mv:KeyPressed(IN_JUMP) and isOnGround then
-				ply:EmitSound("npc/dog/dog_footstep_run02.wav", 100, 147)
+		-- closing the prediction values {{{
+			if predictionFields then
+				class.PredictionClose(ply, cmd, predictionFields)
 			end
 		-- }}}
 	end
@@ -998,7 +1089,7 @@ end
 			local timerId = "merekisv1ultrakill_StyleThink" .. ply:EntIndex() .. ply:Nick()
 			local dt = 0.1
 			timer.Create(timerId, dt, 0, function()
-				if not (IsValid(ply) and ply:Alive() and ply:GetNWString("jcms_class") == "merekisv1ultrakill") then
+				if not (IsValid(ply) and ply:Alive() and jcms.class_Get(ply) == "merekisv1ultrakill") then
 					timer.Remove(timerId)
 					return
 				end
@@ -1031,7 +1122,7 @@ end
 			local ply = LocalPlayer()
 			if not ply:Alive() then return end
 			if ply:GetObserverMode() ~= OBS_MODE_NONE then return end
-			if ply:GetNWString("jcms_class", "infantry") ~= "merekisv1ultrakill" then return end
+			if jcms.class_Get(ply) ~= "merekisv1ultrakill" then return end
 			local dt = FrameTime()
 			
 			local rank = class.GetCurrentStyleRank(ply)
@@ -1126,7 +1217,7 @@ if SERVER then
 		merekisv1ultrakill_allV1s = merekisv1ultrakill_allV1s or {}
 
 		function merekisv1ultrakill_CheckV1(ply)
-			return IsValid(ply) and ply:IsPlayer() and ply:Alive() and ply:Health() > 0 and ply:GetObserverMode() == OBS_MODE_NONE and ply:GetNWString("jcms_class", "infantry") == "merekisv1ultrakill"
+			return IsValid(ply) and ply:IsPlayer() and ply:Alive() and ply:Health() > 0 and ply:GetObserverMode() == OBS_MODE_NONE and jcms.class_Get(ply) == "merekisv1ultrakill"
 		end
 
 		function merekisv1ultrakill_UpdateV1s(add)
@@ -1355,7 +1446,7 @@ if CLIENT then
 	end
 
 	function class.DrawHUDStamina(ply)
-		local stamina = ply.jcms_v1Stamina or 0
+		local stamina = ply.jcms_v1Stamina or 3
 		local staminaWidth = 100
 		local hasEnough = stamina >= 1
 		local off = 6
@@ -1516,13 +1607,13 @@ if CLIENT then
 		cam.End3D2D()
 	end
 
-	hook.Add("Think", "merekisv1ultrakill_StaminaRestoration", function()
+	hook.Add("Think", "merekisv1ultrakill_PredictionAndStamina", function()
 		local ply = LocalPlayer()
 
-		if not ply.jcms_v1Stamina then
-			ply.jcms_v1Stamina = 3
+		if ( not ply:Alive() ) or jcms.class_Get(ply) ~= "merekisv1ultrakill" then
+			class.PredictionReset(ply)
+		elseif game.SinglePlayer() then
+			ply.jcms_v1Stamina = math.Clamp( (ply.jcms_v1Stamina or 3) + FrameTime()*0.7, 0, 3 )
 		end
-
-		ply.jcms_v1Stamina = math.Clamp( ply.jcms_v1Stamina + FrameTime()*0.7, 0, 3 )
 	end)
 end

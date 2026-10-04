@@ -69,16 +69,31 @@ end
 
 -- Movement prediction (saving fields and stuff so that client doesn't spaz out) {{{
 do
+	local fieldsToSave = {
+		"jcms_v1Slamming",
+		"jcms_v1Stamina",
+		"jcms_v1LastAirborneTime",
+		"jcms_v1AirSpeedStore",
+		"jcms_v1WallJumps",
+		"jcms_v1HoldingSlamming",
+		"jcms_v1LastSlamLand",
+		"jcms_v1PerformedPowerSlam",
+		"jcms_v1SlideVector",
+		"jcms_v1SlideVectorCreeped",
+		"jcms_v1Dashed",
+		"jcms_v1LastDash",
+		"jcms_v1DashShouldCancel"
+	}
+
 	local function fieldsSave(plyTbl)
 		local fields = {}
 
-		for k, v in pairs(plyTbl) do
-			if k:sub(1, 7) == "jcms_v1" then
-				if type(v) == "Vector" then
-					fields[k] = Vector(v)
-				elseif type(v) ~= "table" then
-					fields[k] = v
-				end
+		for i, k in ipairs(fieldsToSave) do
+			local v = plyTbl[k]
+			if type(v) == "Vector" then
+				fields[k] = Vector(v)
+			elseif type(v) ~= "table" then
+				fields[k] = v
 			end
 		end
 
@@ -269,7 +284,7 @@ end
 
 		-- calculating movement {{{
 			local vel = mv:GetVelocity()
-			local ang = ply:EyeAngles()
+			local ang = cmd:GetViewAngles()
 			local ang2D = Angle(0, ang.y, 0)
 			local dir2D = ang2D:Forward()
 			
@@ -376,7 +391,7 @@ end
 
 				if speed2D < runSpeed and not wallHugging and not isOnGround and isMoving and not plyTbl.jcms_v1Slamming then
 					local added = dir2DDesired * runSpeed
-					added:Mul(FrameTime())
+					added:Mul(engine.TickInterval())
 					vel:Add(added)
 					mv:SetVelocity(vel)
 				end

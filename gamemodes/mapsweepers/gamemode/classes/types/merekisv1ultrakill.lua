@@ -953,6 +953,40 @@ end
 		}
 	}
 
+	-- Some nominations for unique damage types are just copy-pasting shit so I'm just going to do this: {{{
+	do
+		local copies = {
+			nervegas = "fried",
+			poison = "fried",
+			fall = "dissolved",
+			radiation = "dissolved",
+			drown = "dissolved",
+			acid = "fried"
+		}
+
+		local foundByKeys = {}
+		for i, nom in ipairs(class.styleNominations) do
+			foundByKeys[ nom.name ] = nom
+		end
+
+		for name, nameToCopy in pairs(copies) do
+			local nom_old = foundByKeys[ nameToCopy ]
+			local nom_new = table.Copy( nom_old )
+
+			nom_new.name = name
+			nom_new.name_displayFunc = function(count)
+				if count <= 1 then
+					return "#merekisv1ultrakill.nom_" .. name
+				else
+					return language.GetPhrase("merekisv1ultrakill.nom_" .. name .. "x"):format(count)
+				end
+			end
+
+			table.insert(class.styleNominations, nom_new)
+		end
+	end
+	-- }}}
+
 	class.styleNominationsIndexDict = {}
 	for i, nomination in ipairs(class.styleNominations) do
 		class.styleNominationsIndexDict[ nomination.name ] = i
@@ -1386,7 +1420,7 @@ if SERVER then
 				return
 			elseif inflictor:GetClass() == "jcms_landmine" and not constraint.HasConstraints(inflictor) then
 				local phys = inflictor:GetPhysicsObject()
-				if IsValid(phys) and phys:GetVelocity():LengthSqr() >= 1000^2 then
+				if IsValid(phys) and inflictor.jcms_batTime and (CurTime() - inflictor.jcms_batTime) < 2 then
 					merekisv1ultrakill_AddNomination(ply, "homerun", 1)
 					return
 				end
@@ -1423,9 +1457,30 @@ if SERVER then
 			return
 		end
 
-		if bit.band(lastDamageType, bit.bor(DMG_BURN, DMG_SLOWBURN)) > 0 and bit.band(lastDamageType, bit.bor(DMG_BULLET, DMG_SLASH, DMG_CLUB, DMG_BUCKSHOT)) == 0 then
-			merekisv1ultrakill_AddNomination(ply, "fried", 1)
-			return
+		if bit.band(lastDamageType, bit.bor(DMG_BULLET, DMG_SLASH, DMG_CLUB, DMG_BUCKSHOT)) == 0 then
+			-- elseifs!!!
+			if bit.band(lastDamageType, bit.bor(DMG_BURN, DMG_SLOWBURN)) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "fried", 1)
+				return
+			elseif bit.band(lastDamageType, DMG_ACID) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "acid", 1)
+				return
+			elseif bit.band(lastDamageType, DMG_NERVEGAS) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "nervegas", 1)
+				return
+			elseif bit.band(lastDamageType, bit.bor(DMG_PARALYZE, DMG_POISON)) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "poison", 1)
+				return
+			elseif bit.band(lastDamageType, DMG_FALL) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "fall", 1)
+				return
+			elseif bit.band(lastDamageType, bit.bor(DMG_DROWNRECOVER, DMG_DROWN)) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "drown", 1)
+				return
+			elseif bit.band(lastDamageType, DMG_RADIATION) > 0 then
+				merekisv1ultrakill_AddNomination(ply, "radiation", 1)
+				return
+			end
 		end
 
 		local isWeak = npc:GetMaxHealth() <= 20 or (npc.jcms_bounty and npc.jcms_bounty < 20)
@@ -1443,6 +1498,10 @@ if SERVER then
 			elseif ent.GetHackedByRebels and ent:GetHackedByRebels() then
 				merekisv1ultrakill_AddNomination(ply, "unhack", 1)
 				return
+			end
+
+			if ent:GetClass() == "jcms_landmine" and not constraint.HasConstraints(ent) then
+				ent.jcms_batTime = CurTime()
 			end
 		end
 

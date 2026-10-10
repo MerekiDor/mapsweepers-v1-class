@@ -1197,7 +1197,7 @@ end
 				ply.jcms_v1StyleScore = net.ReadUInt(8)
 
 				local nomCount = net.ReadUInt(6)
-				if ply.jcms_v1StyleRankId == 0 and ply.jcms_v1StyleScore == 0 and nomCount == 0 then
+				if ply.jcms_v1StyleRankId == 1 and ply.jcms_v1StyleScore == 0 and nomCount == 0 then
 					-- clear the nominations since all zeros means we just spawned in
 					if type(ply.jcms_v1StyleNominations) == "table" then
 						table.Empty(ply.jcms_v1StyleNominations)
@@ -1461,6 +1461,7 @@ if CLIENT then
 	end
 
 	function class.DrawHUDStamina(ply)
+		if not ply:Alive() then return end
 		local stamina = ply.jcms_v1Stamina or 3
 		local staminaWidth = 100
 		local hasEnough = stamina >= 1
@@ -1515,7 +1516,7 @@ if CLIENT then
 		end
 
 		jcms.setup3d2dCentral("right")
-			surface.SetAlphaMultiplier(0.5)
+			surface.SetAlphaMultiplier(0.66)
 				surface.SetDrawColor(jcms.color_dark)
 				surface.DrawRect(x, y, w, h_rank)
 				surface.DrawRect(x + 32, y + h_rank + 32, w, h_timer)

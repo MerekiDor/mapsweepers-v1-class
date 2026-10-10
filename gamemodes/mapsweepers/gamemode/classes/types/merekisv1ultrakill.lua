@@ -1683,6 +1683,36 @@ if CLIENT then
 		cam.End3D2D()
 	end
 
+	function class.DoMovementEffects(ply)
+		local pos = ply:GetPos()
+		if math.random() < 0.85 and ply:Crouching() and ply:IsOnGround() then
+			local plyVel = ply:GetVelocity()
+
+			if plyVel:Length2DSqr() > (ply:GetCrouchedWalkSpeed()*ply:GetWalkSpeed() + 10)^2 then
+				local emitter = ParticleEmitter(pos)
+
+				local p = emitter:Add("effects/spark", pos)
+				if p then
+					p:SetDieTime(math.Rand(0.25, 0.66))
+
+					local vel = AngleRand():Forward()
+					vel.z = math.abs(vel.z)
+					vel:Mul(320)
+
+					plyVel:Mul(math.random())
+					vel:Add(plyVel)
+					p:SetVelocity(vel)
+					p:SetGravity(Vector(0, 0, -900))
+					p:SetCollide(true)
+
+					p:SetRoll(math.random()*360)
+					p:SetStartSize(math.Rand(12, 24))
+					p:SetEndSize(0)
+				end
+			end
+		end
+	end
+
 	hook.Add("Think", "merekisv1ultrakill_PredictionAndStamina", function()
 		local ply = LocalPlayer()
 
@@ -1693,5 +1723,13 @@ if CLIENT then
 		end
 
 		ply.jcms_v1StyleAnim = math.max(0, (ply.jcms_v1StyleAnim or 0) - FrameTime()*2)
+	end)
+
+	hook.Add("Think", "merekisv1ultrakill_MovementEffects", function()
+		for i, ply in player.Iterator() do
+			if ply:Alive() and jcms.class_Get(ply) == "merekisv1ultrakill" then
+				class.DoMovementEffects(ply)
+			end
+		end
 	end)
 end

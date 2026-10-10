@@ -1195,6 +1195,7 @@ end
 				-- Style
 				ply.jcms_v1StyleRankId = net.ReadUInt(3) + 1
 				ply.jcms_v1StyleScore = net.ReadUInt(8)
+				ply.jcms_v1StyleAnim = (ply.jcms_v1StyleAnim or 0) + 0.33
 
 				local nomCount = net.ReadUInt(6)
 				if ply.jcms_v1StyleRankId == 1 and ply.jcms_v1StyleScore == 0 and nomCount == 0 then
@@ -1515,7 +1516,7 @@ if CLIENT then
 			return
 		end
 
-		jcms.setup3d2dCentral("right")
+		jcms.setup3d2dCentral("right", 2 - 1 / ((ply.jcms_v1StyleAnim or 0) + 1))
 			surface.SetAlphaMultiplier(0.66)
 				surface.SetDrawColor(jcms.color_dark)
 				surface.DrawRect(x, y, w, h_rank)
@@ -1631,5 +1632,7 @@ if CLIENT then
 		elseif game.SinglePlayer() then
 			ply.jcms_v1Stamina = math.Clamp( (ply.jcms_v1Stamina or 3) + FrameTime()*0.7, 0, 3 )
 		end
+
+		ply.jcms_v1StyleAnim = math.max(0, (ply.jcms_v1StyleAnim or 0) - FrameTime()*2)
 	end)
 end

@@ -145,8 +145,7 @@ do
 end
 -- }}}
 
-function class.Think(ply)
-	if CLIENT then return end
+function class.ThinkSlam(ply)
 	local plyTbl = ply:GetTable()
 	local dt = FrameTime()
 
@@ -198,6 +197,31 @@ function class.Think(ply)
 			plyTbl.jcms_v1SlamVictims = nil
 		end
 	end
+end
+
+function class.ThinkWeaponsReload(ply) -- Recon reloading logic but instant
+	local activeWep = ply:GetActiveWeapon()
+	for i, wep in ipairs(ply:GetWeapons()) do 
+		if (not IsValid(wep)) or (wep == activeWep) then continue end
+
+		if wep:Clip1() < wep:GetMaxClip1() then
+			local ammoType = wep:GetPrimaryAmmoType()
+			local reserveAmmo = ply:GetAmmoCount(ammoType)
+			if reserveAmmo == 0 then continue end
+
+			local clip1, maxclip1 = wep:Clip1(), wep:GetMaxClip1()
+			local reloadAmnt = math.min(reserveAmmo, maxclip1 - clip1)
+
+			ply:RemoveAmmo( reloadAmnt, ammoType )
+			wep:SetClip1(clip1 + reloadAmnt)
+		end
+	end
+end
+
+function class.Think(ply)
+	if CLIENT then return end
+	class.ThinkSlam(ply)
+	class.ThinkWeaponsReload(ply)
 end
 
 -- Movement {{{

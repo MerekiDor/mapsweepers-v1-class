@@ -1,0 +1,15 @@
+{
+	"title"		:	"V1 + Style Mechanics for Map Sweepers",
+	"type"		:	"gamemode",
+	"tags"		:	[ "fun" ],
+	"ignore"	:
+	[
+		"*.kateproject",
+		"*.git*",
+		"*.gitignore",
+		".vscode/settings.json",
+		"LICENSE",
+		"LICENSE_OFL",
+		"README.md"
+	]
+}

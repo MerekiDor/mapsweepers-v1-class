@@ -277,6 +277,7 @@ end
 		local slamPower = 1500
 		local dashSpeedMul = isCreeped and 2.5 or 4.5
 		local dashAirborneTime = 0.14
+		local dashInvulnTime = dashAirborneTime/2
 		local wallClimbSpeedMul = 0.45
 		local powerSlamTime = 0.1
 
@@ -454,6 +455,7 @@ end
 							plyTbl.jcms_v1DashShouldCancel = not isOnGround
 
 							if SERVER then
+								plyTbl.jcms_v1InvUntil = math.max(plyTbl.jcms_v1InvUntil or 0, ct + dashInvulnTime)
 								ply:EmitSound("merekisv1ultrakill/dash.wav", 100)
 							end
 

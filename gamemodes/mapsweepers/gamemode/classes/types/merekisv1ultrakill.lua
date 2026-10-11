@@ -1266,6 +1266,15 @@ if SERVER then
 	-- Healing {{{
 		merekisv1ultrakill_allV1s = merekisv1ultrakill_allV1s or {}
 
+		function merekisv1ultrakill_GetBounty(victim, default)
+			local arenaMul = jcms.arena_settings and jcms.arena_settings.bountymul or 1
+			if victim.jcms_bounty then
+				return math.ceil(victim.jcms_bounty / arenaMul)
+			else
+				return default
+			end
+		end
+
 		function merekisv1ultrakill_CheckV1(ply)
 			return IsValid(ply) and ply:IsPlayer() and ply:Alive() and ply:Health() > 0 and ply:GetObserverMode() == OBS_MODE_NONE and jcms.class_Get(ply) == "merekisv1ultrakill"
 		end
@@ -1295,7 +1304,7 @@ if SERVER then
 				if ply == victim then continue end
 				local plyPos = ply:WorldSpaceCenter()
 				if plyPos:DistToSqr(dmgPos) <= rad2 or plyPos:DistToSqr(victimPos) <= rad2 then
-					local healingDone = math.min( victim:GetMaxHealth()/2, dmg:GetDamage()/2, (victim.jcms_bounty or 100)/3.5 )
+					local healingDone = math.min( victim:GetMaxHealth()/2, dmg:GetDamage()/2, merekisv1ultrakill_GetBounty(victim, 100)/3.5 )
 					local attacker = dmg:GetAttacker()
 					if attacker ~= ply then
 						healingDone = healingDone * 0.3
@@ -1483,7 +1492,7 @@ if SERVER then
 			end
 		end
 
-		local isWeak = npc:GetMaxHealth() <= 20 or (npc.jcms_bounty and npc.jcms_bounty < 20)
+		local isWeak = npc:GetMaxHealth() <= 20 or merekisv1ultrakill_GetBounty(npc, 0) < 20
 		merekisv1ultrakill_AddNomination(ply, isMidair and "airkill" or (isWeak and "weakkill" or "kill"), 1)
 	end
 

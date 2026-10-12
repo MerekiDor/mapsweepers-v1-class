@@ -494,6 +494,12 @@ end
 				else
 					plyTbl.jcms_v1Dashed = false
 				end
+
+				if isOnGround and plyTbl.jcms_v1LastDash and (CurTime() - plyTbl.jcms_v1LastDash) < dashAirborneTime then
+					if mv:KeyPressed(IN_JUMP) then
+						plyTbl.jcms_v1Stamina = math.max(0, plyTbl.jcms_v1Stamina - 1)
+					end
+				end
 				
 				-- staying airborne
 				if (ct - (plyTbl.jcms_v1LastDash or 0) < dashAirborneTime) and (not plyTbl.jcms_v1Slamming) and (plyTbl.jcms_v1DashShouldCancel) then
